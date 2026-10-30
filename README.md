@@ -1,0 +1,163 @@
+# CSV Lean Angle Renderer
+
+Generate a transparent, frame-accurate PNG image sequence of a minimalist motorcycle lean-angle gauge from CSV data. Designed for **Apple Motion** and **Final Cut Pro**.
+
+The display has:
+- A clean upper **180° semicircular arc** (no arc numbers or tick marks except zero)
+- A **moving dot** for the current signed lean angle
+- A **fixed, short 0° marker** at the top of the arc
+- One **positive-only number** below the arc (e.g., both -42 and +42 display `42°`)
+- Transparent background, supersampled anti-aliasing, multiprocessing, a Terminal progress bar and resumable rendering
+
+**Signed angle convention:** negative = lean left; positive = lean right; zero = upright. Values outside -90° to +90° are clamped to the endpoints.
+
+## Requirements
+
+- macOS (recommended for the default font and Apple Motion workflow)
+- Python 3.10+
+- Pillow (see `requirements.txt`)
+
+## Installation
+
+Clone this repository and set up a Python virtual environment:
+
+~~~bash
+git clone https://github.com/Sir-Boops/csv-lean-angle-render.git
+cd csv-lean-angle-render
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -r requirements.txt
+~~~
+
+Or, if Python and Pillow are already available, run the script directly.
+
+## CSV format
+
+The CSV must contain `lean_angle` **or** `value`. An optional `frame` column gives explicit **zero-based frame numbers**.
+
+~~~csv
+frame,lean_angle
+0,0
+1,-10
+2,-25
+3,-40
+4,-55
+5,-30
+6,0
+7,20
+8,35
+9,50
+~~~
+
+See [examples/sample_lean.csv](examples/sample_lean.csv).
+
+You can also omit the `frame` column:
+
+~~~csv
+lean_angle
+0
+-10
+-25
+0
+25
+~~~
+
+In that case, every row corresponds to the next frame, beginning at frame 0. If explicit frame numbers have gaps, the last known value is held for the missing frames; gaps before the first specified frame show 0°.
+
+## Render frames
+
+Use the included example:
+
+~~~bash
+python3 generate_lean_angle_resume.py examples/sample_lean.csv
+~~~
+
+The default output folder is `lean_frames/` next to your CSV file. To choose the destination:
+
+~~~bash
+python3 generate_lean_angle_resume.py examples/sample_lean.csv -o ./my_frames
+~~~
+
+For a 60-fps project, 4× antialiasing and four rendering workers:
+
+~~~bash
+python3 generate_lean_angle_resume.py examples/sample_lean.csv --fps 60 --aa 4 --workers 4 -o ./my_frames
+~~~
+
+### Command-line options
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `csv_path` | required | Path to the input CSV |
+| `-o, --output` | `lean_frames` beside CSV | Folder for generated PNGs |
+| `--fps` | `30` | **Intended playback** frames per second; positive, up to 240 |
+| `--width` | `1920` | PNG width |
+| `--height` | `1080` | PNG height |
+| `--aa` | `4` | Supersampling scale, 1 through 8 |
+| `--workers` | logical CPU count + 1 | Concurrent worker processes |
+| `--restart` | off | Delete renderer-owned frames and rerender from scratch |
+| `--adopt-existing` | off | Reuse older frames without a manifest **only if** data and settings match |
+
+**RAM caution:** 4× AA at 1920×1080 creates large intermediate images. Automatic workers may consume substantial memory. For many Macs `--workers 2` or `--workers 4` is a good first try. More processes do not always run faster.
+
+### Important: FPS and CSV frame numbers
+
+PNGs **do not embed a frame rate**. The `--fps` option records intended playback FPS in `sequence_info.txt` and displays the calculated animation duration. It **does not** resample data or create extra frames. Set the **source image-sequence FPS** in Apple Motion to match.
+
+Example: 300 PNGs play for 10 seconds at 30 fps or 5 seconds at 60 fps. If you change FPS, ensure the CSV's frame numbers represent the timing you intend.
+
+## Stop and resume
+
+While rendering, press **Ctrl+C once** in Terminal. In-flight frames are allowed to finish, and existing completed PNGs are preserved.
+
+To resume, rerun **the same command with the same CSV, settings and output folder**:
+
+~~~bash
+python3 generate_lean_angle_resume.py examples/sample_lean.csv --fps 60 -o ./my_frames
+~~~
+
+The script scans output files and skips valid existing PNGs. It atomically saves new PNGs (temporary file, then rename), re-renders missing or invalid frames, and shows progress based on completed frames.
+
+A `render_manifest.json` prevents accidentally mixing a new CSV or altered visual settings with older frames. If you want to change the source CSV or rendering settings in an existing output folder, specify `--restart` or use a **new folder**. `--restart` deletes renderer-matching `lean_*.png` images in that folder. **Back up anything important in your output folder first.**
+
+When migrating frames from a previous version that didn't write a manifest, `--adopt-existing` can reuse them, but only if you're certain the CSV and appearance settings are identical.
+
+## Import into Apple Motion
+
+1. Open a Motion project at the desired resolution and intended FPS.
+2. Choose **File → Import → Media**.
+3. Navigate to your output folder and select `lean_000000.png`.
+4. Enable **Image Sequence** in the import dialog (expand **Options** if necessary).
+5. Import it as **one animated image-sequence layer**.
+6. In the Media inspector, check/set the source frame rate to the value used for `--fps`.
+7. Position the layer over your footage or graphics. The PNG background is transparent.
+
+To reuse it in Final Cut Pro, you can convert the Motion project to a Final Cut Pro Generator (`File → Convert Project To → Generator`) and publish it. Another option is exporting an alpha-capable `ProRes 4444` video from Motion, then importing the `.mov` into Final Cut Pro.
+
+## Output files
+
+Example at ten CSV frames:
+
+~~~text
+my_frames/
+  lean_000000.png
+  lean_000001.png
+  ...
+  lean_000009.png
+  render_manifest.json
+  sequence_info.txt
+~~~
+
+The output PNGs are RGBA (transparent). The script does not produce video directly.
+
+## Customization
+
+Adjust the constants near the top of `generate_lean_angle_resume.py`: `ARC_COLOR`, `DOT_COLOR`, `TEXT_COLOR`, `ARC_WIDTH`, `DOT_RADIUS`, `ZERO_TICK_LENGTH`, `ZERO_TICK_WIDTH`, `FONT_SIZE` and `FONT_PATH`.
+
+When changing visuals for an existing render, use a fresh output folder or `--restart` to avoid mixing different styles.
+
+## Development
+
+See [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) for the full practical project handoff and [AGENTS.md](AGENTS.md) for guidance to coding agents such as Codex.
+
+This is a Python/Pillow image sequence generator, not a Motion plug-in. The rendered graphics can be composited in Motion or Final Cut Pro.
