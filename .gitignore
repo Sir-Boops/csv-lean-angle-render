@@ -1,0 +1,16 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+.DS_Store
+
+# Generated image-sequence artifacts
+lean_*.png
+render_manifest.json
+sequence_info.txt
+lean_frames/
+my_frames/
+output_frames/
