@@ -40,3 +40,14 @@ The second run should reuse completed PNGs. Check output PNG dimensions and tran
 
 ## Collaboration
 Explain any behavior changes, document new flags, and prefer small verifiable updates. If instructions in a task conflict with existing behavior, mention the tradeoff and implement the user's explicit request.
+
+## Separate speed renderer
+
+`generate_speed_resume.py` renders only a centered white whole-number speed
+on transparency. Preserve the absence of units, degree symbols and gauge
+artwork. Accept `speed`/`value` with optional `frame`; hold gaps, reject
+negative/nonfinite speeds and never apply the lean-angle clamp. Keep speed
+frames (`speed_*.png`) and manifest identity separate from lean output.
+Update both user docs when changing speed behavior and run the full unittest
+suite. The standalone speed CLI uses Skia only and preserves the same safe
+resume, bounded scheduling, FPS metadata and macOS multiprocessing semantics.

@@ -135,3 +135,25 @@ benchmark is implied by Linux spawn tests.
 ## Expectations for future coding sessions
 
 Use the GitHub repository as the durable source of truth. Preserve the minimalist gauge, existing CLI switches, resume guarantees and Motion workflow. Implement requested changes with tests and documentation. Avoid claiming PNGs embed an FPS.
+
+## Number-only speed renderer
+
+`generate_speed_resume.py` is a separate standalone Skia CLI. It draws only a
+white whole-number speed, centered horizontally and vertically on a transparent
+RGBA canvas, using the lean renderer's default font and proportional font size.
+No units or degree symbol are rendered and no unit conversion is performed.
+It accepts `speed` or `value`, optional zero-based `frame`, holds gaps (0 before
+the first reading), rejects negative/nonfinite values, and does not clamp speeds
+to the lean gauge's range. Python round-to-even is used for whole numbers.
+
+Default output: `speed_frames/` beside CSV, `speed_000000.png`, etc. Supports
+resolution, AA=1–8, FPS metadata, worker count, bounded multiprocessing, progress,
+Ctrl+C, automatic resume, atomic saves, validation, `--restart` and
+`--adopt-existing`. The manifest includes `renderer: speed-number`, source,
+font and Skia identity. Keep speed and lean output folders separate; manifests
+must never be mixed. Restart removes only numbered speed PNGs and replaces
+manifest/sequence metadata. The original lean renderer is unchanged.
+
+`examples/sample_speed.csv` and `tests/test_speed.py` cover the speed workflow,
+including no-unit centered artwork, values above 90, mapping, corrupt/missing
+frame recovery, manifest safety, atomic failures, spawn workers and Ctrl+C resume.

@@ -160,6 +160,50 @@ A `render_manifest.json` prevents accidentally mixing a new CSV or altered visua
 
 When migrating frames from a previous version that didn't write a manifest, `--adopt-existing` can reuse them, but only if you're certain the CSV and appearance settings are identical.
 
+## Number-only speed overlay
+
+Use the separate `generate_speed_resume.py` script to render **only a centered
+white whole-number speed** on a transparent background. It uses the same font
+and proportional font size as the lean gauge. No units, degree symbol, arc,
+dot or other graphics are rendered. Values are displayed without conversion.
+
+~~~bash
+python3 generate_speed_resume.py examples/sample_speed.csv --fps 60 --workers 4
+python3 generate_speed_resume.py your_speed.csv -o ./my_speed_frames
+~~~
+
+The CSV accepts `speed` or `value`, with optional zero-based `frame`:
+
+~~~csv
+frame,speed
+0,0
+1,25.4
+2,72
+3,120
+~~~
+
+Without `frame`, each row becomes one frame starting at zero. Frame gaps hold
+the previous speed; frames before the first reading show 0. Speeds must be
+finite and nonnegative and are **not clamped to 90**. The number uses Python's
+`round()` (halfway values round to the nearest even integer, so 72.5 → 72 and
+73.5 → 74), consistent with the lean renderer's numeric rounding.
+
+Output defaults to `speed_frames/` beside the CSV, with transparent RGBA PNGs
+named `speed_000000.png`, etc. Defaults are 1920×1080, native Skia AA=1,
+30 FPS and logical CPU count + 1 workers. Supported options are `-o/--output`,
+`--width`, `--height`, `--aa` (1–8), `--fps`, `--workers`, `--restart` and
+`--adopt-existing`; run `--help` for details. The speed script uses Skia only.
+
+Ctrl+C safely stops rendering. Rerun the same command to automatically skip
+valid frames and regenerate missing or damaged files. The manifest records
+speed renderer identity, source CSV, visual settings, Skia version and font
+hash. Use separate folders for speed and lean sequences; their manifests are
+incompatible. `--restart` deletes only numbered `speed_*.png` frames, replaces
+the manifest and sequence info, and preserves unrelated files. Adopt existing
+frames only when you know they came from this speed script with matching data
+and settings. FPS records playback metadata only; set the same source sequence
+FPS when importing `speed_000000.png` into Motion.
+
 ## Import into Apple Motion
 
 1. Open a Motion project at the desired resolution and intended FPS.
