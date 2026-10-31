@@ -1,1 +1,2 @@
+skia-python>=144.1,<145
 Pillow>=10,<13

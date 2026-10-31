@@ -1,0 +1,229 @@
+{
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.39",
+  "machine": "x86_64",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "pillow": "12.3.0",
+  "skia": "144.1",
+  "logical_cpus": 9,
+  "font": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+  "source_commit": "95d216f3c063d359edf968b7449296ef2cd2b3de",
+  "resolution": [
+    1920,
+    1080
+  ],
+  "includes": "CLI startup, CSV, drawing, PNG encoding, file writes, manifest and sequence metadata; fresh folders; no repeated-angle cache",
+  "runs": [
+    {
+      "backend": "pillow",
+      "aa": 4,
+      "workers": 1,
+      "repeat": 0,
+      "seconds": 18.154108060999988,
+      "frames": 24,
+      "bytes": 850682
+    },
+    {
+      "backend": "skia",
+      "aa": 1,
+      "workers": 1,
+      "repeat": 0,
+      "seconds": 2.1638929649998317,
+      "frames": 24,
+      "bytes": 591147
+    },
+    {
+      "backend": "skia",
+      "aa": 4,
+      "workers": 1,
+      "repeat": 0,
+      "seconds": 3.640947419999975,
+      "frames": 24,
+      "bytes": 511819
+    },
+    {
+      "backend": "pillow",
+      "aa": 4,
+      "workers": 4,
+      "repeat": 0,
+      "seconds": 6.350321102999715,
+      "frames": 24,
+      "bytes": 850682
+    },
+    {
+      "backend": "skia",
+      "aa": 1,
+      "workers": 4,
+      "repeat": 0,
+      "seconds": 0.7778533780001453,
+      "frames": 24,
+      "bytes": 591147
+    },
+    {
+      "backend": "skia",
+      "aa": 4,
+      "workers": 4,
+      "repeat": 0,
+      "seconds": 1.2226048019997506,
+      "frames": 24,
+      "bytes": 511819
+    },
+    {
+      "backend": "skia",
+      "aa": 4,
+      "workers": 1,
+      "repeat": 1,
+      "seconds": 3.6428734040000563,
+      "frames": 24,
+      "bytes": 511819
+    },
+    {
+      "backend": "skia",
+      "aa": 1,
+      "workers": 1,
+      "repeat": 1,
+      "seconds": 1.80510683600005,
+      "frames": 24,
+      "bytes": 591147
+    },
+    {
+      "backend": "pillow",
+      "aa": 4,
+      "workers": 1,
+      "repeat": 1,
+      "seconds": 17.24795539800016,
+      "frames": 24,
+      "bytes": 850682
+    },
+    {
+      "backend": "skia",
+      "aa": 4,
+      "workers": 4,
+      "repeat": 1,
+      "seconds": 1.2889659280003798,
+      "frames": 24,
+      "bytes": 511819
+    },
+    {
+      "backend": "skia",
+      "aa": 1,
+      "workers": 4,
+      "repeat": 1,
+      "seconds": 0.8106029049999961,
+      "frames": 24,
+      "bytes": 591147
+    },
+    {
+      "backend": "pillow",
+      "aa": 4,
+      "workers": 4,
+      "repeat": 1,
+      "seconds": 6.131900890999987,
+      "frames": 24,
+      "bytes": 850682
+    },
+    {
+      "backend": "pillow",
+      "aa": 4,
+      "workers": 1,
+      "repeat": 2,
+      "seconds": 17.9519361990001,
+      "frames": 24,
+      "bytes": 850682
+    },
+    {
+      "backend": "skia",
+      "aa": 1,
+      "workers": 1,
+      "repeat": 2,
+      "seconds": 1.8830108590000236,
+      "frames": 24,
+      "bytes": 591147
+    },
+    {
+      "backend": "skia",
+      "aa": 4,
+      "workers": 1,
+      "repeat": 2,
+      "seconds": 3.5811895389997517,
+      "frames": 24,
+      "bytes": 511819
+    },
+    {
+      "backend": "pillow",
+      "aa": 4,
+      "workers": 4,
+      "repeat": 2,
+      "seconds": 5.548027451000053,
+      "frames": 24,
+      "bytes": 850682
+    },
+    {
+      "backend": "skia",
+      "aa": 1,
+      "workers": 4,
+      "repeat": 2,
+      "seconds": 0.7199379919998137,
+      "frames": 24,
+      "bytes": 591147
+    },
+    {
+      "backend": "skia",
+      "aa": 4,
+      "workers": 4,
+      "repeat": 2,
+      "seconds": 1.3765986700000212,
+      "frames": 24,
+      "bytes": 511819
+    }
+  ],
+  "summary": [
+    {
+      "backend": "pillow",
+      "aa": 4,
+      "workers": 1,
+      "median_seconds": 17.9519361990001,
+      "fps": 1.336903147045318,
+      "mean_bytes_per_frame": 35445.083333333336
+    },
+    {
+      "backend": "skia",
+      "aa": 1,
+      "workers": 1,
+      "median_seconds": 1.8830108590000236,
+      "fps": 12.745545191781446,
+      "mean_bytes_per_frame": 24631.125
+    },
+    {
+      "backend": "skia",
+      "aa": 4,
+      "workers": 1,
+      "median_seconds": 3.640947419999975,
+      "fps": 6.591690906648733,
+      "mean_bytes_per_frame": 21325.791666666668
+    },
+    {
+      "backend": "pillow",
+      "aa": 4,
+      "workers": 4,
+      "median_seconds": 6.131900890999987,
+      "fps": 3.9139575845437538,
+      "mean_bytes_per_frame": 35445.083333333336
+    },
+    {
+      "backend": "skia",
+      "aa": 1,
+      "workers": 4,
+      "median_seconds": 0.7778533780001453,
+      "fps": 30.85414382554178,
+      "mean_bytes_per_frame": 24631.125
+    },
+    {
+      "backend": "skia",
+      "aa": 4,
+      "workers": 4,
+      "median_seconds": 1.2889659280003798,
+      "fps": 18.619576730963,
+      "mean_bytes_per_frame": 21325.791666666668
+    }
+  ]
+}

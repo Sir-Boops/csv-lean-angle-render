@@ -11,11 +11,17 @@ Examples:
 CSV headers: frame,lean_angle OR frame,value; frame is optional.
 Negative lean moves the dot left; positive lean moves it right.
 
-Uses multiprocessing (separate processes), not Python threads: Pillow drawing
+Uses multiprocessing (separate processes), not Python threads: drawing
 and image processing are CPU/memory-intensive. Processes can run on several CPU
 cores. By default it uses (logical CPU count + 1) workers.
 4x AA at 1920x1080 uses substantial RAM per worker; consider --workers 2
 or --workers 4 if automatic selection uses too much memory.
+
+Skia draws and encodes PNGs by default, with native antialiasing (--aa 1).
+Install requirements.txt. --backend pillow selects the original renderer
+(default --aa 4) for compatible resumes or comparison. Skia AA>1 uses
+Mitchell cubic downsampling, not Pillow LANCZOS. Backends preserve the
+design but do not produce identical pixels; never mix their output frames.
 
 PNG image files cannot encode an FPS; --fps specifies intended playback speed.
 
@@ -48,7 +54,8 @@ from PIL import Image, ImageDraw, ImageFont
 WIDTH = 1920
 HEIGHT = 1080
 FPS = 30
-AA = 4
+AA = 1
+PILLOW_AA = 4
 
 ARC_COLOR = (255, 255, 255, 180)
 DOT_COLOR = (255, 255, 255, 255)
@@ -66,6 +73,7 @@ _WORKER_OUTPUT = None
 _WORKER_WIDTH = None
 _WORKER_HEIGHT = None
 _WORKER_AA = None
+_WORKER_SKIA = None
 
 
 def load_font(size):
@@ -181,7 +189,7 @@ def frame_tasks(values):
         yield frame, current_angle
 
 
-def init_worker(output_dir, width, height, aa):
+def init_worker(output_dir, width, height, aa, backend="skia"):
     """Initialize subprocesses once, with Ctrl+C handled by the parent."""
     # SIGINT is ignored only in workers. The parent stops issuing new work,
     # then lets active frames finish before shutting the pool down.
@@ -194,6 +202,11 @@ def init_worker(output_dir, width, height, aa):
     _WORKER_AA = aa
     size = max(1, round(FONT_SIZE * aa * min(width / WIDTH, height / HEIGHT)))
     _WORKER_FONT = load_font(size)
+    global _WORKER_SKIA
+    _WORKER_SKIA = None
+    if backend == "skia":
+        from skia_backend import SkiaRenderer
+        _WORKER_SKIA = SkiaRenderer(width, height, aa, _WORKER_FONT, sys.modules[__name__])
 
 
 def render_task(task):
@@ -206,10 +219,13 @@ def render_task(task):
     os.close(fd)
     temp_path = Path(temp_name)
     try:
-        draw_frame(
-            temp_path, angle, _WORKER_WIDTH, _WORKER_HEIGHT, _WORKER_AA,
-            _WORKER_FONT,
-        )
+        if _WORKER_SKIA is not None:
+            _WORKER_SKIA.save(temp_path, angle)
+        else:
+            draw_frame(
+                temp_path, angle, _WORKER_WIDTH, _WORKER_HEIGHT, _WORKER_AA,
+                _WORKER_FONT,
+            )
         os.replace(temp_path, final_path)  # Atomic within the same folder.
     finally:
         temp_path.unlink(missing_ok=True)
@@ -231,13 +247,13 @@ def valid_frame_png(path, width, height):
         return False
 
 
-def manifest_settings(csv_file, width, height, aa):
+def manifest_settings(csv_file, width, height, aa, backend="skia"):
     """Parameters affecting PNG pixels; FPS changes only playback metadata."""
     digest = hashlib.sha256()
     with csv_file.open("rb") as source:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
-    return {
+    settings = {
         "render_version": 1,
         "csv_sha256": digest.hexdigest(),
         "width": width,
@@ -253,6 +269,17 @@ def manifest_settings(csv_file, width, height, aa):
         "zero_tick_length": ZERO_TICK_LENGTH,
         "zero_tick_width": ZERO_TICK_WIDTH,
     }
+    if backend == "skia":
+        import skia
+        size = max(1, round(FONT_SIZE * aa * min(width / WIDTH, height / HEIGHT)))
+        font = load_font(size)
+        settings.update({
+            "backend": "skia",
+            "backend_version": skia.__version__,
+            "skia_render_version": 1,
+            "resolved_font_sha256": hashlib.sha256(Path(font.path).read_bytes()).hexdigest(),
+        })
+    return settings
 
 
 def atomic_write_text(path, contents):
@@ -334,7 +361,14 @@ def write_sequence_info(output_dir, total_frames, width, height, fps):
 
 
 def generate_frames(csv_file, output_dir, width, height, aa, workers, fps,
-                    restart=False, adopt_existing=False):
+                    restart=False, adopt_existing=False, backend="skia"):
+    if backend not in ("pillow", "skia"):
+        raise ValueError("Backend must be pillow or skia")
+    if backend == "skia":
+        try:
+            import skia  # Check dependency before modifying the output folder.
+        except ImportError as exc:
+            raise ValueError("Skia backend requires: python3 -m pip install -r requirements.txt") from exc
     if width <= 0 or height <= 0:
         raise ValueError("Width and height must be positive")
     if not 1 <= aa <= 8:
@@ -348,10 +382,11 @@ def generate_frames(csv_file, output_dir, width, height, aa, workers, fps,
 
     values = read_csv_rows(csv_file)
     total_frames = max(values) + 1
-    settings = manifest_settings(csv_file, width, height, aa)
+    settings = manifest_settings(csv_file, width, height, aa, backend)
     prepare_output(output_dir, settings, restart, adopt_existing)
 
     print("Rendering Lean Angle Frames")
+    print(f"Backend: {backend}")
     print(f"Resolution: {width} x {height} | AA: {aa}x | {fps:g} fps | Workers: {workers}")
     print(f"Output: {output_dir}")
     print("Press Ctrl+C once to stop safely; rerun the same command to resume.")
@@ -373,7 +408,7 @@ def generate_frames(csv_file, output_dir, width, height, aa, workers, fps,
         try:
             if workers == 1:
                 # Direct worker mode, with no process startup overhead.
-                init_worker(output_dir, width, height, aa)
+                init_worker(output_dir, width, height, aa, backend)
                 completed_now = 0
                 for task in tasks:
                     render_task(task)
@@ -384,7 +419,7 @@ def generate_frames(csv_file, output_dir, width, height, aa, workers, fps,
                 with ProcessPoolExecutor(
                     max_workers=workers,
                     initializer=init_worker,
-                    initargs=(output_dir, width, height, aa),
+                    initargs=(output_dir, width, height, aa, backend),
                 ) as pool:
                     pending = set()
 
@@ -426,13 +461,15 @@ def generate_frames(csv_file, output_dir, width, height, aa, workers, fps,
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Render supersampled lean-angle PNGs with a multi-process progress bar for Apple Motion."
+        description="Render antialiased lean-angle PNGs with Skia and resumable multiprocessing for Apple Motion."
     )
     parser.add_argument("csv_path", help="Path to CSV with 'lean_angle' or 'value' column")
     parser.add_argument("-o", "--output", help="Output folder (default: lean_frames beside CSV)")
     parser.add_argument("--width", type=int, default=WIDTH)
     parser.add_argument("--height", type=int, default=HEIGHT)
-    parser.add_argument("--aa", type=int, default=AA, help="Supersampling scale 1-8 (default: 4)")
+    parser.add_argument("--aa", type=int, help=f"Supersampling scale 1-8 (default: {AA} for Skia native antialiasing; {PILLOW_AA} for Pillow)")
+    parser.add_argument("--backend", choices=("skia", "pillow"), default="skia",
+                        help="Graphics backend (default: skia). Pillow is retained for legacy resumes and comparison.")
     parser.add_argument("--fps", type=float, default=FPS, help="Intended image-sequence playback FPS (default: 30). Set same FPS in Apple Motion.")
     parser.add_argument("--restart", action="store_true", help="Delete this renderer's existing PNG frames and start again")
     parser.add_argument("--adopt-existing", action="store_true", help="Resume older lean PNG files with no manifest; use only if CSV/settings match")
@@ -443,6 +480,8 @@ def main():
              "override to reduce memory use)",
     )
     args = parser.parse_args()
+    if args.aa is None:
+        args.aa = AA if args.backend == "skia" else PILLOW_AA
 
     csv_file = Path(args.csv_path).expanduser().resolve()
     if not csv_file.is_file():
@@ -455,7 +494,7 @@ def main():
     try:
         finished = generate_frames(
             csv_file, output_dir, args.width, args.height, args.aa,
-            args.workers, args.fps, args.restart, args.adopt_existing,
+            args.workers, args.fps, args.restart, args.adopt_existing, args.backend,
         )
     except ValueError as exc:
         parser.error(str(exc))

@@ -19,15 +19,22 @@ User has CSV readings representing a motorcycle's lean angle and wants them sync
 9. Added multiprocessing (separate processes, not threads) to accelerate independent image generation. `--workers` default is `os.cpu_count() + 1`, override manually for memory efficiency.
 10. Added `--fps` for intended playback frame rate, while preserving CSV-to-frame mappings.
 11. Added Ctrl+C safe stopping and later resumption, atomic PNG writes, validity checks, CSV/settings manifest, `--restart`, and `--adopt-existing`.
+12. Replaced the default graphics pipeline with CPU Skia native antialiasing (`--aa 1`) for speed. Kept the original Pillow backend (`--backend pillow`, default AA=4) for legacy resumes and comparison.
 
 ## Canonical source
 
-`generate_lean_angle_resume.py` is the most recent, feature-complete script and the single implementation to maintain. Prior experimental scripts (AA, progress, parallel, auto-workers, custom FPS) were superseded.
+`generate_lean_angle_resume.py` is the most recent, feature-complete script and the canonical CLI to maintain. Prior experimental scripts (AA, progress, parallel, auto-workers, custom FPS) were superseded.
+
+Graphics default: `skia_backend.py` draws and encodes PNGs. The primary script
+retains CSV parsing, multiprocessing, manifests, atomic saves, validation,
+progress and resume. Pillow supplies font selection/anchor metrics and PNG
+validation, and its original drawing function is kept for legacy renders.
 
 Other files:
 - `README.md` — setup, examples, CLI reference, Motion / Final Cut import workflow
 - `AGENTS.md` — coding agent development instructions
-- `requirements.txt` — Pillow dependency
+- `requirements.txt` — Skia and Pillow dependencies
+- `requirements-skia.txt` — compatibility alias to `requirements.txt`
 - `examples/sample_lean.csv` — example inputs
 
 ## Data conventions and frame timing
@@ -54,18 +61,20 @@ The `--fps` flag does *not* resample the input. It only writes the intended play
 
 ## Visual design / coordinates
 
-Canvas default: 1920×1080 RGBA transparent. Center at x=50% width, y=52% height. Arc radius is min(34% of width, 28% of height). Arc is upper semicircle from left (180°) through top (270°) to right (360°) as interpreted by Pillow.
+Canvas default: 1920×1080 RGBA transparent. Default rendering is now Skia
+native antialiasing at AA=1. The coordinates below describe the shared design;
+Skia insets the arc path by half its stroke width to match Pillow inside strokes. Center at x=50% width, y=52% height. Arc radius is min(34% of width, 28% of height). Arc is upper semicircle from left (180°) through top (270°) to right (360°) as interpreted by Pillow.
 
 Move the dot according to `theta_degrees = 270 + lean_angle`, converted to radians for arc position. Dot and number are white. Arc is softer/partially transparent white. Short 0° tick crosses the apex. Large number is centered near 73% of frame height. The numeric text is `abs(round(lean_angle))` plus the degree symbol.
 
-Current constants in the script (adjustable at top): `WIDTH`, `HEIGHT`, `FPS`, `AA`, `ARC_COLOR`, `DOT_COLOR`, `TEXT_COLOR`, `ARC_WIDTH`, `DOT_RADIUS`, `ZERO_TICK_LENGTH`, `ZERO_TICK_WIDTH`, `FONT_SIZE`, `FONT_PATH`.
+Current constants in the script (adjustable at top): `WIDTH`, `HEIGHT`, `FPS`, `AA`, `PILLOW_AA`, `ARC_COLOR`, `DOT_COLOR`, `TEXT_COLOR`, `ARC_WIDTH`, `DOT_RADIUS`, `ZERO_TICK_LENGTH`, `ZERO_TICK_WIDTH`, `FONT_SIZE`, `FONT_PATH`.
 
 ## Rendering pipeline
 
 - Input parsed via `csv.DictReader`; CSV is hashed for manifest.
 - Task generator maps every frame to the held signed angle.
 - Spawn parallel processes with `ProcessPoolExecutor` (or run sequentially for one worker).
-- Each worker draws a supersampled RGBA image via Pillow and resizes using LANCZOS.
+- Each worker reuses a CPU Skia surface, draws with native antialiasing, and encodes PNGs. Optional AA>1 uses Mitchell cubic downsampling. The legacy Pillow backend uses LANCZOS.
 - Each output is saved first to a temporary file in the destination folder, then atomically renamed to `lean_NNNNNN.png`.
 - Parent process tracks completed frames and updates Terminal progress.
 - On start, valid existing PNGs are recognized and skipped; invalid ones are regenerated.
@@ -77,7 +86,7 @@ Current constants in the script (adjustable at top): `WIDTH`, `HEIGHT`, `FPS`, `
 ~~~bash
 python3 -m pip install -r requirements.txt
 python3 generate_lean_angle_resume.py examples/sample_lean.csv
-python3 generate_lean_angle_resume.py examples/sample_lean.csv --fps 60 --workers 4 --aa 4 -o my_frames
+python3 generate_lean_angle_resume.py examples/sample_lean.csv --fps 60 --workers 4 -o my_frames
 # Stop with Ctrl+C. Resume with the same exact command.
 ~~~
 
@@ -86,6 +95,35 @@ When changing CSV or appearance, use a different output folder or add `--restart
 ## Apple Motion / Final Cut workflow
 
 In Motion: create project at intended FPS → File > Import > Media → select first `lean_000000.png` → check Image Sequence → import as one layer → ensure source sequence frame rate matches `--fps`. Transparency allows composite over footage. For FCP: publish the Motion project as a Final Cut Pro Generator, or export transparent ProRes 4444 MOV and import that.
+
+## Skia implementation and migration
+
+Skia is the default backend, with native antialiasing (`--aa 1`). Install
+`requirements.txt`; `requirements-skia.txt` is a compatibility alias. Skia runs
+on CPU without GPU setup. Pillow remains for font selection/anchor metrics,
+PNG validation and the legacy renderer. `--backend pillow` restores the
+original drawing pipeline and defaults to AA=4 when `--aa` is omitted.
+The shared CLI constant `AA` is now 1; `PILLOW_AA` is 4.
+
+Skia AA>1 uses Mitchell cubic filtering, while Pillow uses LANCZOS. Designs
+are visually comparable, not pixel-identical. No angles are quantized or cached.
+The resolved font file is shared, and Pillow anchors position Skia's text.
+Worker-local fonts, paints, surfaces and a bounded cache of numeric label
+anchors are reused. Multiprocessing and the bounded task queue are unchanged.
+
+Skia manifests include backend/version/font identity to prevent incompatible
+reuse. Legacy Pillow manifest format is unchanged. Existing Pillow sequences
+must use `--backend pillow` with their original settings to resume; new Skia
+renders require a fresh folder or `--restart`. Never adopt a different
+backend's frames with `--adopt-existing`.
+
+`tools/benchmark_renderers.py` runs reproducible end-to-end comparisons;
+`tests/test_backends.py` checks defaults, legacy compatibility, output, resume,
+manifest safeguards, atomic saves, spawn workers, and interruption/resume.
+See `docs/benchmark/RESULTS.md` and its example images for the initial prototype
+comparison. These historical results used Linux and DejaVu Sans; macOS
+performance and Arial rendering remain to be checked on a Mac. No macOS
+benchmark is implied by Linux spawn tests.
 
 ## Known considerations / possible future work (not yet requested)
 

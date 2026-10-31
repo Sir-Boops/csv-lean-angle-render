@@ -1,0 +1,2 @@
+# Compatibility alias for the earlier prototype installation command.
+-r requirements.txt

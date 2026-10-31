@@ -12,7 +12,7 @@ Maintain a command-line Python renderer that converts signed lean-angle CSV read
 - Negative = left, positive = right; display `abs(round(angle))` with degree symbol, and clamp lean to [-90, 90].
 - One clean top semicircular arc, moving dot on arc, short fixed tick at the apex (0°), large number below. **Do not add arc labels, extra ticks, needles, or backgrounds** unless requested.
 - RGBA transparent PNG output named `lean_000000.png`, etc.
-- Supersampling (`--aa`, default 4) with Pillow LANCZOS downsampling.
+- Skia is the default CPU graphics backend with native antialiasing (`--aa 1`). Optional supersampling (`--aa` 2–8) uses Mitchell cubic downsampling. Keep `--backend pillow` for legacy resumes/comparison, defaulting to AA=4 and LANCZOS.
 - Configurable width/height, intended playback FPS (`--fps`, default 30), output folder, and multiprocessing worker count (logical CPU cores + 1 by default).
 - Terminal progress bar, safe Ctrl+C interruption, resumable rendering, atomic frame writes, and manifest validation.
 - `--restart` and `--adopt-existing` semantics.
@@ -26,6 +26,8 @@ Maintain a command-line Python renderer that converts signed lean-angle CSV read
 6. Treat Ctrl+C as a safe stop, not a deletion request. Preserve successfully completed PNGs.
 7. Changes to the visual renderer should be tested against reference frames when feasible. Avoid unintended visual changes in optimization-only patches.
 8. Keep README and `PROJECT_CONTEXT.md` synchronized with feature and CLI changes.
+9. Preserve backend/version/font manifest identity for Skia, and legacy Pillow manifest compatibility. Never mix frames from different backends.
+10. Skia drawing/encoding lives in `skia_backend.py`; the canonical entry point owns scheduling, CSV, and safe saves. Pillow is retained for font metrics and PNG validation. Run `python3 -m unittest discover -s tests -v` after backend changes.
 
 ## Suggested checks
 ~~~bash

@@ -7,7 +7,7 @@ The display has:
 - A **moving dot** for the current signed lean angle
 - A **fixed, short 0° marker** at the top of the arc
 - One **positive-only number** below the arc (e.g., both -42 and +42 display `42°`)
-- Transparent background, supersampled anti-aliasing, multiprocessing, a Terminal progress bar and resumable rendering
+- Transparent background, Skia native antialiasing, optional supersampling, multiprocessing, a Terminal progress bar and resumable rendering
 
 **Signed angle convention:** negative = lean left; positive = lean right; zero = upright. Values outside -90° to +90° are clamped to the endpoints.
 
@@ -15,7 +15,7 @@ The display has:
 
 - macOS (recommended for the default font and Apple Motion workflow)
 - Python 3.10+
-- Pillow (see `requirements.txt`)
+- Skia (`skia-python`) and Pillow (see `requirements.txt`)
 
 ## Installation
 
@@ -29,7 +29,9 @@ source .venv/bin/activate
 python3 -m pip install -r requirements.txt
 ~~~
 
-Or, if Python and Pillow are already available, run the script directly.
+If Python and the dependencies are already available, run the script directly.
+Skia binary packages are available for Intel and Apple Silicon Macs; use a
+Python version with a matching wheel.
 
 ## CSV format
 
@@ -78,10 +80,10 @@ The default output folder is `lean_frames/` next to your CSV file. To choose the
 python3 generate_lean_angle_resume.py examples/sample_lean.csv -o ./my_frames
 ~~~
 
-For a 60-fps project, 4× antialiasing and four rendering workers:
+For a 60-fps project with native antialiasing and four rendering workers:
 
 ~~~bash
-python3 generate_lean_angle_resume.py examples/sample_lean.csv --fps 60 --aa 4 --workers 4 -o ./my_frames
+python3 generate_lean_angle_resume.py examples/sample_lean.csv --fps 60 --workers 4 -o ./my_frames
 ~~~
 
 ### Command-line options
@@ -93,12 +95,48 @@ python3 generate_lean_angle_resume.py examples/sample_lean.csv --fps 60 --aa 4 -
 | `--fps` | `30` | **Intended playback** frames per second; positive, up to 240 |
 | `--width` | `1920` | PNG width |
 | `--height` | `1080` | PNG height |
-| `--aa` | `4` | Supersampling scale, 1 through 8 |
+| `--aa` | `1` for Skia; `4` for Pillow | Supersampling scale, 1 through 8; Skia AA=1 uses native antialiasing |
+| `--backend` | `skia` | Graphics engine: `skia` or legacy `pillow` |
 | `--workers` | logical CPU count + 1 | Concurrent worker processes |
 | `--restart` | off | Delete renderer-owned frames and rerender from scratch |
 | `--adopt-existing` | off | Reuse older frames without a manifest **only if** data and settings match |
 
 **RAM caution:** 4× AA at 1920×1080 creates large intermediate images. Automatic workers may consume substantial memory. For many Macs `--workers 2` or `--workers 4` is a good first try. More processes do not always run faster.
+
+### Skia rendering and migration from Pillow
+
+Skia is the default CPU graphics engine. It draws the arc, dot, zero marker
+and numeric label, and encodes the transparent PNGs. No GPU setup is required.
+The default `--aa 1` uses Skia's native antialiasing at the output resolution,
+avoiding the large 4× intermediate canvas. For optional supersampling, pass
+`--aa 2` through `--aa 8`; Skia downsamples with Mitchell cubic filtering.
+Pillow is retained for font selection/anchor metrics and completed-PNG
+validation, plus the original graphics backend.
+
+The minimalist design and data conventions are preserved. Skia and Pillow do
+not produce identical pixels: text hinting, edge coverage, fractional rounding
+and alpha blending may differ slightly. The initial Linux benchmark measured
+roughly 8–10× faster end-to-end rendering with native Skia than Pillow AA=4;
+macOS speed and Arial appearance still need local verification.
+See [benchmark results and example frames](docs/benchmark/RESULTS.md).
+
+**Existing Pillow renders:** use a new folder for Skia, or explicitly select
+`--restart` to replace renderer-owned frames. Manifests prevent mixing backends.
+Do not use `--adopt-existing` to adopt Pillow frames into a Skia render.
+To resume an older Pillow sequence without changing its pixels, keep the same
+CSV/settings/output folder and add `--backend pillow`:
+
+~~~bash
+python3 generate_lean_angle_resume.py data.csv --backend pillow -o ./existing_pillow_frames
+~~~
+
+Pillow keeps its original `--aa 4` default and LANCZOS downsampling; pass the
+original `--aa` explicitly if it was different. Legacy Pillow manifests remain
+compatible. Skia manifests record the backend, Skia version and resolved font
+hash, as well as CSV and visual settings. Changing backend, font, Skia version
+or AA requires a new folder or `--restart`. The font/version identity check
+applies to Skia; legacy Pillow manifests retain their original format.
+`requirements-skia.txt` remains an installation alias for the earlier prototype.
 
 ### Important: FPS and CSV frame numbers
 
@@ -158,6 +196,23 @@ When changing visuals for an existing render, use a fresh output folder or `--re
 
 ## Development
 
+With the dependencies installed, run the backend integration checks:
+
+~~~bash
+python3 -m unittest discover -s tests -v
+python3 tools/benchmark_renderers.py --output ./benchmark-local
+~~~
+
+The benchmark renders 24 frames at 1920×1080 into fresh folders, three times
+per configuration, with one and four workers. It compares Pillow AA=4, Skia
+AA=1, and Skia AA=4; these are different rendering/antialiasing configurations,
+not pixel-equivalent quality settings. It includes process startup and PNG
+encoding/writes, and saves raw timings plus a median summary in `results.json`.
+Choose a new output path each time. Override `--frames`, `--repeats` or
+`--workers` for longer runs. The benchmark produces numbered PNGs and can use
+significant disk space. Timing is wall-clock, without an explicit filesystem
+sync; it measures normal CLI completion rather than durable disk throughput.
+
 See [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) for the full practical project handoff and [AGENTS.md](AGENTS.md) for guidance to coding agents such as Codex.
 
-This is a Python/Pillow image sequence generator, not a Motion plug-in. The rendered graphics can be composited in Motion or Final Cut Pro.
+This is a Python/Skia image sequence generator, not a Motion plug-in. The rendered graphics can be composited in Motion or Final Cut Pro.
